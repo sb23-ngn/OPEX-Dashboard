@@ -25,6 +25,16 @@ function table(headers, body, opts={}) {
   return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body.map(row=>`<tr>${row.map((v,i)=>`<td>${opts.raw? v : fmt(v,headers[i])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 function section(title,desc,inner){return `<section class="panel"><div class="panel-head"><div><h2>${title}</h2>${desc?`<p>${desc}</p>`:''}</div></div>${inner}</section>`}
+const PIE_COLORS=['#41498E','#D44B60','#6974B8','#E58A98','#343C7C','#B83E54','#8E96CE','#F0B5BF','#5963A5','#C85D70','#AAB0DD','#E9A0AD'];
+function pieChart(items){
+ const valid=items.filter(x=>Number.isFinite(Number(x.value))&&Number(x.value)>0);
+ const total=valid.reduce((a,x)=>a+Number(x.value),0);
+ if(!valid.length||!total) return '<div class="empty-state">There is not enough positive numeric data to create a pie chart.</div>';
+ let cursor=0;
+ const stops=valid.map((x,i)=>{const start=cursor;cursor+=Number(x.value)/total*100;return `${PIE_COLORS[i%PIE_COLORS.length]} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;}).join(',');
+ const legend=valid.map((x,i)=>`<div class="pie-legend-item"><span class="pie-swatch" style="background:${PIE_COLORS[i%PIE_COLORS.length]}"></span><span class="pie-legend-name">${esc(x.name)}</span><strong>${(Number(x.value)/total*100).toFixed(1)}%</strong><small>${money(Number(x.value))}</small></div>`).join('');
+ return `<div class="pie-layout"><div class="pie-chart" role="img" aria-label="Pie chart showing each property's share of total actual OPEX" style="background:conic-gradient(${stops})"><div class="pie-hole"><strong>${money(total)}</strong><span>Total actual OPEX</span></div></div><div class="pie-legend">${legend}</div></div>`;
+}
 function overview(){
  const r=rows, heads=r[0]||[], data=r.slice(1,13), total=r[13]||[];
  const at=i=>total[i];
@@ -36,6 +46,7 @@ function overview(){
  <div class="welcome"><div><div class="eyebrow">TEAM B · MANAGEMENT REPORT</div><h1>Operating expenses at a glance</h1><p>Portfolio-wide budget, expenditure and collection performance through September 2026.</p></div><div class="period-chip">YTD · SEPTEMBER 2026</div></div>
  <div class="kpi-grid">${kpi('Monthly OPEX budget',money(monthly),'Across 12 properties')}${kpi('Actual OPEX · YTD',money(spend),'Recorded expenditure')}${kpi('Budget OPEX · YTD',money(budget),'Year-to-date allocation')}${kpi('Actual collections · YTD',money(collect),'Total property collections')}</div>
  ${section('Portfolio expenditure overview','Compare year-to-date actual OPEX across the properties.',`<div class="chart-bars">${bars}</div>`)}
+ ${section('Actual OPEX distribution','Each property’s share of total year-to-date actual operating expenditure.',pieChart(data.map(x=>({name:x[1],value:Number(x[3])}))))}
  <div class="toolbar"><button class="action-button" id="toggle-portfolio" type="button">Show portfolio performance</button></div><div id="portfolio-table" class="hidden">${section('Portfolio performance','A consolidated view of each property’s operating position.',table(heads.slice(1,12),body))}</div>
  <div class="two-col">${section('Actual OPEX by property','Year-to-date expenditure comparison.',`<div class="bar-list">${bars}</div>`)}
  ${section('Key portfolio indicators','Totals from the workbook.',`<div class="metric-list"><div><span>Variance against YTD budget</span><strong>${money(at(5))}</strong></div><div><span>OPEX run rate</span><strong>${pct(at(8))}</strong></div><div><span>Annual OPEX balance</span><strong>${money(at(9))}</strong></div><div><span>Collection less YTD OPEX</span><strong>${money(at(11))}</strong></div></div>`)}</div>
@@ -131,6 +142,15 @@ else property();
    const nameCol=head.findIndex((h,i)=>i!==col && /property|location|name|site|description|particular|expense|category/i.test(String(h||'')));
    return `<div class="chart-bars">${items.map((r,i)=>`<div class="chart-row"><div class="chart-name">${safeText(r[nameCol>=0?nameCol:0]||`Item ${i+1}`)}</div><div class="chart-track"><div class="chart-fill" style="width:${Math.max(1,Math.abs(r[col])/max*100)}%"></div></div><div class="chart-amount">${fmtCell(r[col],head[col])}</div></div>`).join('')}</div>`;
  }
+ function uploadedPie(rows){
+   const col=numericColumn(rows); if(col<0) return '<div class="empty-state">No suitable numeric data was found for a pie chart.</div>';
+   const head=rows[0]||[]; const nameCol=head.findIndex((h,i)=>i!==col&&/property|location|name|site|description|particular|expense|category/i.test(String(h||'')));
+   const items=rows.slice(1).filter(r=>r.some(v=>v!==null&&v!=='')&&numeric(r[col])&&r[col]>0&&!/total|grand total|sum total/i.test(String(r[nameCol>=0?nameCol:0]||''))).slice(0,15).map((r,i)=>({name:String(r[nameCol>=0?nameCol:0]||`Item ${i+1}`),value:r[col]}));
+   const total=items.reduce((a,x)=>a+x.value,0); if(!items.length||!total) return '<div class="empty-state">There is not enough positive numeric data to create a pie chart.</div>';
+   let cursor=0; const stops=items.map((x,i)=>{const start=cursor;cursor+=x.value/total*100;return `${PIE_COLORS[i%PIE_COLORS.length]} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;}).join(',');
+   const legend=items.map((x,i)=>`<div class="pie-legend-item"><span class="pie-swatch" style="background:${PIE_COLORS[i%PIE_COLORS.length]}"></span><span class="pie-legend-name">${safeText(x.name)}</span><strong>${(x.value/total*100).toFixed(1)}%</strong><small>${fmtCell(x.value,head[col])}</small></div>`).join('');
+   return `<div class="pie-layout"><div class="pie-chart" role="img" aria-label="Pie chart showing workbook data distribution" style="background:conic-gradient(${stops})"><div class="pie-hole"><strong>${fmtCell(total,head[col])}</strong><span>Total</span></div></div><div class="pie-legend">${legend}</div></div>`;
+ }
  function renderUploadedOverview(){
    const summary=uploadedNav.find(x=>x.type==='summary')||uploadedNav[0];
    const rows=uploadedSheets[summary.sheet]||[];
@@ -139,6 +159,7 @@ else property();
    content.innerHTML=`<div class="welcome"><div><div class="eyebrow">UPLOADED WORKBOOK</div><h1>${safeText(summary.sheet)}</h1><p>Your workbook has been read in this browser. Hidden worksheets are excluded from the dashboard.</p></div><div class="period-chip">${properties.length} PROPERTY / DATA SHEETS</div></div>
    <div class="kpi-grid">${numericCols.slice(0,4).map(x=>{const vals=rows.slice(1).map(r=>r[x.i]).filter(numeric);const sum=vals.reduce((a,b)=>a+b,0);return `<article class="kpi"><div class="kpi-label">${safeText(x.h||'Total')}</div><div class="kpi-value">${fmtCell(sum,x.h)}</div><div class="kpi-sub">Sum of numeric entries</div></article>`}).join('')}</div>
    <section class="panel chart-panel"><div class="panel-head"><div><h2>Workbook overview</h2><p>Visual comparison using the most relevant numeric column detected in the summary sheet.</p></div></div>${chartFor(rows)}</section>
+   <section class="panel chart-panel"><div class="panel-head"><div><h2>Expense distribution</h2><p>Share of the detected numeric measure across workbook items.</p></div></div>${uploadedPie(rows)}</section>
    <div class="toolbar"><button class="action-button" id="uploaded-toggle">Show portfolio performance</button></div><div id="uploaded-portfolio" class="hidden"><section class="panel"><div class="panel-head"><div><h2>Portfolio performance</h2><p>Summary worksheet data.</p></div></div>${makeTable(rows)}</section></div>
    <section class="panel"><div class="panel-head"><div><h2>Workbook sheets</h2><p>Select a sheet from the navigation to view its full information.</p></div></div><div class="metric-list">${uploadedNav.map(x=>`<div><span>${safeText(x.label)}</span><strong>${(uploadedSheets[x.sheet]||[]).length} rows</strong></div>`).join('')}</div></section>`;
    document.getElementById('uploaded-toggle').onclick=()=>{const el=document.getElementById('uploaded-portfolio');el.classList.toggle('hidden');document.getElementById('uploaded-toggle').textContent=el.classList.contains('hidden')?'Show portfolio performance':'Hide portfolio performance'};
