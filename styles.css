@@ -23,3 +23,11 @@
 .pie-legend-item small{grid-column:2/4;color:#98a0b2;font-size:9px}
 @media(max-width:850px){.pie-layout{grid-template-columns:1fr}.pie-legend{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.pie-legend{grid-template-columns:1fr}}
+
+/* Keep both overview charts visible together on desktop */
+.overview-charts{align-items:start;grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr)}
+.overview-charts .panel{height:100%;min-width:0}
+.overview-charts .pie-layout{grid-template-columns:1fr;gap:18px}
+.overview-charts .pie-chart{width:min(100%,230px)}
+.overview-charts .pie-legend{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:1100px){.overview-charts{grid-template-columns:1fr}}
