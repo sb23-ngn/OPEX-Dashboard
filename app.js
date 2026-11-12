@@ -35,7 +35,8 @@ function overview(){
  document.getElementById('content').innerHTML=`
  <div class="welcome"><div><div class="eyebrow">TEAM B · MANAGEMENT REPORT</div><h1>Operating expenses at a glance</h1><p>Portfolio-wide budget, expenditure and collection performance through September 2026.</p></div><div class="period-chip">YTD · SEPTEMBER 2026</div></div>
  <div class="kpi-grid">${kpi('Monthly OPEX budget',money(monthly),'Across 12 properties')}${kpi('Actual OPEX · YTD',money(spend),'Recorded expenditure')}${kpi('Budget OPEX · YTD',money(budget),'Year-to-date allocation')}${kpi('Actual collections · YTD',money(collect),'Total property collections')}</div>
- ${section('Portfolio performance','A consolidated view of each property’s operating position.',table(heads.slice(1,12),body))}
+ ${section('Portfolio expenditure overview','Compare year-to-date actual OPEX across the properties.',`<div class="chart-bars">${bars}</div>`)}
+ <div class="toolbar"><button class="action-button" id="toggle-portfolio" type="button">Show portfolio performance</button></div><div id="portfolio-table" class="hidden">${section('Portfolio performance','A consolidated view of each property’s operating position.',table(heads.slice(1,12),body))}</div>
  <div class="two-col">${section('Actual OPEX by property','Year-to-date expenditure comparison.',`<div class="bar-list">${bars}</div>`)}
  ${section('Key portfolio indicators','Totals from the workbook.',`<div class="metric-list"><div><span>Variance against YTD budget</span><strong>${money(at(5))}</strong></div><div><span>OPEX run rate</span><strong>${pct(at(8))}</strong></div><div><span>Annual OPEX balance</span><strong>${money(at(9))}</strong></div><div><span>Collection less YTD OPEX</span><strong>${money(at(11))}</strong></div></div>`)}</div>
  <div class="note">Figures are presented as stored in the supplied workbook. Negative variances indicate actual expenditure above budget where the workbook defines variance as budget less actual.</div>`;
@@ -84,3 +85,92 @@ function property(){
 if(sheetName==='SUMMARY') overview();
 else if(sheetName==='SUMMARY (2)') comparison();
 else property();
+
+
+// Workbook upload: each visitor gets an independent, in-browser dashboard.
+(function workbookUpload(){
+ const input=document.getElementById('workbook-upload');
+ if(!input) return;
+ const content=document.getElementById('content');
+ const navEl=document.getElementById('main-nav');
+ let uploadedSheets=null, uploadedNav=[], activeUploadSheet=null;
+ const cleanName=s=>String(s||'').trim();
+ const safeText=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const numeric=v=>typeof v==='number'&&Number.isFinite(v);
+ const fmtCell=(v,h='')=>{
+   if(v===null||v===undefined||v==='') return '—';
+   if(numeric(v)){
+     const label=String(h).toLowerCase();
+     if(label.includes('%')||label.includes('rate')||label.includes('margin')) return (Math.abs(v)<=1?v*100:v).toFixed(1)+'%';
+     if(/budget|actual|opex|expense|spend|variance|salary|security|lawma|collection|balance|amount|revenue|cost|nom/i.test(label)) return new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN',maximumFractionDigits:0}).format(v);
+     return new Intl.NumberFormat('en-NG',{maximumFractionDigits:2}).format(v);
+   }
+   return safeText(v);
+ };
+ function makeTable(rows){
+   const maxCols=Math.min(18,Math.max(1,...rows.map(r=>r.length)));
+   const head=(rows[0]||[]).slice(0,maxCols);
+   const body=rows.slice(1).filter(r=>r.some(v=>v!==null&&v!==''));
+   return `<div class="table-wrap"><table><thead><tr>${Array.from({length:maxCols},(_,i)=>`<th>${safeText(head[i]||`Column ${i+1}`)}</th>`).join('')}</tr></thead><tbody>${body.map(r=>`<tr>${Array.from({length:maxCols},(_,i)=>`<td>${fmtCell(r[i],head[i])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+ }
+ function numericColumn(rows){
+   const headers=rows[0]||[]; const candidates=[];
+   for(let c=0;c<headers.length;c++){
+     const vals=rows.slice(1).map(r=>r[c]).filter(numeric);
+     if(vals.length>=2 && /actual|opex|expense|spend|budget|revenue|collection|amount|total/i.test(String(headers[c]||''))) candidates.push({c,vals,score:vals.length});
+   }
+   if(candidates.length) return candidates.sort((a,b)=>b.score-a.score)[0].c;
+   let best=-1,count=0;
+   for(let c=0;c<headers.length;c++){const n=rows.slice(1).filter(r=>numeric(r[c])).length;if(n>count){count=n;best=c;}}
+   return count>=2?best:-1;
+ }
+ function chartFor(rows){
+   const col=numericColumn(rows); if(col<0) return '<div class="empty-state">No comparable numeric column was detected for a chart. The worksheet data is still available below.</div>';
+   const head=rows[0]||[], items=rows.slice(1).filter(r=>r.some(v=>v!==null&&v!=='')&&numeric(r[col])).slice(0,30);
+   const max=Math.max(1,...items.map(r=>Math.abs(r[col])));
+   const nameCol=head.findIndex((h,i)=>i!==col && /property|location|name|site|description|particular|expense|category/i.test(String(h||'')));
+   return `<div class="chart-bars">${items.map((r,i)=>`<div class="chart-row"><div class="chart-name">${safeText(r[nameCol>=0?nameCol:0]||`Item ${i+1}`)}</div><div class="chart-track"><div class="chart-fill" style="width:${Math.max(1,Math.abs(r[col])/max*100)}%"></div></div><div class="chart-amount">${fmtCell(r[col],head[col])}</div></div>`).join('')}</div>`;
+ }
+ function renderUploadedOverview(){
+   const summary=uploadedNav.find(x=>x.type==='summary')||uploadedNav[0];
+   const rows=uploadedSheets[summary.sheet]||[];
+   const properties=uploadedNav.filter(x=>x.type==='property');
+   const numericCols=(rows[0]||[]).map((h,i)=>({h,i})).filter(x=>/budget|actual|opex|expense|revenue|collection|variance|nom/i.test(String(x.h||'')));
+   content.innerHTML=`<div class="welcome"><div><div class="eyebrow">UPLOADED WORKBOOK</div><h1>${safeText(summary.sheet)}</h1><p>Your workbook has been read in this browser. Hidden worksheets are excluded from the dashboard.</p></div><div class="period-chip">${properties.length} PROPERTY / DATA SHEETS</div></div>
+   <div class="kpi-grid">${numericCols.slice(0,4).map(x=>{const vals=rows.slice(1).map(r=>r[x.i]).filter(numeric);const sum=vals.reduce((a,b)=>a+b,0);return `<article class="kpi"><div class="kpi-label">${safeText(x.h||'Total')}</div><div class="kpi-value">${fmtCell(sum,x.h)}</div><div class="kpi-sub">Sum of numeric entries</div></article>`}).join('')}</div>
+   <section class="panel chart-panel"><div class="panel-head"><div><h2>Workbook overview</h2><p>Visual comparison using the most relevant numeric column detected in the summary sheet.</p></div></div>${chartFor(rows)}</section>
+   <div class="toolbar"><button class="action-button" id="uploaded-toggle">Show portfolio performance</button></div><div id="uploaded-portfolio" class="hidden"><section class="panel"><div class="panel-head"><div><h2>Portfolio performance</h2><p>Summary worksheet data.</p></div></div>${makeTable(rows)}</section></div>
+   <section class="panel"><div class="panel-head"><div><h2>Workbook sheets</h2><p>Select a sheet from the navigation to view its full information.</p></div></div><div class="metric-list">${uploadedNav.map(x=>`<div><span>${safeText(x.label)}</span><strong>${(uploadedSheets[x.sheet]||[]).length} rows</strong></div>`).join('')}</div></section>`;
+   document.getElementById('uploaded-toggle').onclick=()=>{const el=document.getElementById('uploaded-portfolio');el.classList.toggle('hidden');document.getElementById('uploaded-toggle').textContent=el.classList.contains('hidden')?'Show portfolio performance':'Hide portfolio performance'};
+ }
+ function renderUploadedSheet(sheet){
+   activeUploadSheet=sheet; const rows=uploadedSheets[sheet]||[];
+   const navItem=uploadedNav.find(x=>x.sheet===sheet);
+   document.getElementById('page-heading').textContent=navItem?.label||sheet;
+   content.innerHTML=`<div class="welcome"><div><div class="eyebrow">WORKBOOK SHEET</div><h1>${safeText(navItem?.label||sheet)}</h1><p>Data imported from the selected visible worksheet.</p></div><div class="period-chip">${rows.length} ROWS</div></div><section class="panel chart-panel"><div class="panel-head"><div><h2>Data visualisation</h2><p>Automatically selected numeric measure from this worksheet.</p></div></div>${chartFor(rows)}</section><section class="panel"><div class="panel-head"><div><h2>${safeText(sheet)} · full data</h2><p>All non-empty rows and columns are shown below.</p></div></div>${makeTable(rows)}</section>`;
+   navEl.querySelectorAll('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.sheet===sheet));
+ }
+ function setupUploadedNav(){
+   navEl.innerHTML=uploadedNav.map((x,i)=>`<a href="#" class="nav-link ${i===0?'active':''}" data-sheet="${safeText(x.sheet)}"><span class="nav-icon">${x.type==='summary'?'▦':x.type==='comparison'?'⇄':'⌂'}</span><span>${safeText(x.label)}</span></a>`).join('');
+   navEl.querySelectorAll('[data-sheet]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();const s=a.dataset.sheet;if(uploadedNav[0].sheet===s)renderUploadedOverview();else renderUploadedSheet(s);navEl.querySelectorAll('.nav-link').forEach(n=>n.classList.toggle('active',n===a));document.getElementById('sidebar').classList.remove('open')}));
+ }
+ input.addEventListener('change',async e=>{
+   const file=e.target.files?.[0]; if(!file)return;
+   if(!window.XLSX){alert('The Excel reader could not load. Please check your internet connection and try again.');input.value='';return;}
+   try{
+     const buffer=await file.arrayBuffer(); const wb=XLSX.read(buffer,{type:'array',cellDates:false});
+     const visible=wb.SheetNames.filter(n=>wb.Workbook?.Sheets?.find(s=>s.name===n)?.Hidden!==1 && wb.Workbook?.Sheets?.find(s=>s.name===n)?.Hidden!==2);
+     if(!visible.length) throw new Error('No visible worksheets were found in this workbook.');
+     uploadedSheets={}; visible.forEach(n=>{uploadedSheets[n]=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:null,raw:true,blankrows:false});});
+     const summaryName=visible.find(n=>/^summary(\s*1)?$/i.test(cleanName(n)))||visible.find(n=>/summary|overview|consolidat|portfolio/i.test(n))||visible[0];
+     const comparisonName=visible.find(n=>/summary\s*\(?2\)?|comparison|comparative/i.test(n)&&n!==summaryName);
+     uploadedNav=[{sheet:summaryName,label:'Overview',type:'summary'}];
+     if(comparisonName) uploadedNav.push({sheet:comparisonName,label:'Expense Comparison',type:'comparison'});
+     visible.filter(n=>n!==summaryName&&n!==comparisonName).forEach(n=>uploadedNav.push({sheet:n,label:n.replace(/\s+/g,' ').trim(),type:'property'}));
+     setupUploadedNav(); document.getElementById('page-heading').textContent='Overview'; renderUploadedOverview();
+     const foot=document.querySelector('footer'); if(foot) foot.innerHTML=`Cresswell Facility Management <span>·</span> Viewing ${safeText(file.name)} · Hidden worksheets excluded`;
+   }catch(err){alert('Could not read this workbook: '+err.message+'\nPlease upload a valid Excel workbook.');}
+   input.value='';
+ });
+ const toggle=document.getElementById('toggle-portfolio'); if(toggle) toggle.addEventListener('click',()=>{const el=document.getElementById('portfolio-table');el.classList.toggle('hidden');toggle.textContent=el.classList.contains('hidden')?'Show portfolio performance':'Hide portfolio performance'});
+})();

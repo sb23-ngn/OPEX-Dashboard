@@ -1,27 +1,21 @@
-OPEX DASHBOARD — TEAM B
-Reporting period: September 2026
+CRESSWELL FACILITY MANAGEMENT DASHBOARD
 
-FILES
-- index.html: Portfolio overview (first page)
-- comparison.html: Summary (2), interpreted as Expense Comparison
-- property-1.html through property-12.html: Separate pages for the 12 visible property worksheets
-- app.js, styles.css, data.js: Shared dashboard logic, styling and visible worksheet data
+UPLOAD TO GITHUB PAGES
+1. Extract this ZIP.
+2. Upload all files directly into the root of your public GitHub repository.
+3. In Settings > Pages, choose Deploy from a branch, main, /(root), then Save.
 
-PUBLISH WITH GITHUB PAGES
-1. Create a new PUBLIC GitHub repository (e.g. team-b-opex-dashboard).
-2. Upload every file in this folder to the repository root. Keep all files together.
-3. Open Settings → Pages.
-4. Under Build and deployment, choose Deploy from a branch.
-5. Select branch main and folder / (root), then Save.
-6. Wait for GitHub Pages to publish. Share the generated URL with anyone who needs access.
-
-No login or password is included. Anyone with the link can view the published dashboard.
-To update the dashboard later, replace data.js with a newly generated data.js from the latest workbook and commit the change. If the workbook structure changes, the page templates may also need updating.
+FEATURES
+- Cresswell company logo and navy/red brand palette.
+- Overview with portfolio expenditure bar chart.
+- Portfolio performance table hidden until its button is clicked.
+- Expense Comparison and individual property pages for the supplied September 2026 workbook.
+- Upload Excel Workbook accepts .xlsx and .xls files using SheetJS.
+- Uploaded workbook sheets are detected dynamically; hidden worksheets are excluded.
+- Each visitor's upload is processed locally in that visitor's browser and does not overwrite another visitor's view or the published default workbook.
 
 NOTES
-- Only worksheets marked visible in the supplied Excel workbook are included.
-- Six hidden worksheets are excluded from both the website pages and its embedded data.
-- The source workbook contains calculated values; the dashboard uses saved calculated values.
-- Empty cells are shown as em dashes, not guessed.
-- Figures are presented in Nigerian naira (NGN).
-- Summary (2) includes category comparisons and location-level OPEX/NOM analysis.
+- Excel upload requires an internet connection to load the SheetJS library from jsDelivr.
+- Uploaded data is not sent to a server or shared with other visitors.
+- The dashboard can display arbitrary visible worksheets; automatic chart selection uses column headings and numeric values, so workbooks with different layouts may need a more specific template for perfect KPI interpretation.
+- The published default report remains the original September 2026 dataset.
